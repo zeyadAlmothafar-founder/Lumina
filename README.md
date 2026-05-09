@@ -115,7 +115,7 @@ Speech input is processed **entirely in the browser** — no audio is sent to an
 
 ```bash
 git clone https://github.com/zeyadAlmothafar-founder/Lumina.git
-cd YOUR_REPO
+cd Lumina
 ```
 
 ### 2. Set up the backend
