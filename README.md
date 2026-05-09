@@ -114,7 +114,7 @@ Speech input is processed **entirely in the browser** — no audio is sent to an
 ### 1. Clone the repository
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/YOUR_REPO.git
+git clone https://github.com/zeyadAlmothafar-founder/Lumina.git
 cd YOUR_REPO
 ```
 
