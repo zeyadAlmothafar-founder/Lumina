@@ -1,5 +1,6 @@
 ﻿import { useState } from 'react';
 import { t } from '../i18n.js';
+import { useInferenceHeaders } from '../context/InferenceContext.jsx';
 
 const SUGGESTIONS = {
   en: [
@@ -55,6 +56,7 @@ function getAgents(lang) {
 }
 
 export default function Landing({ onStart, prefillTopic, lang = 'en' }) {
+  const inferenceHeaders = useInferenceHeaders();
   const [topic, setTopic] = useState(prefillTopic || '');
   const [rounds, setRounds] = useState(3);
   const [loading, setLoading] = useState(false);
@@ -71,7 +73,7 @@ export default function Landing({ onStart, prefillTopic, lang = 'en' }) {
     try {
       const res = await fetch('/api/session', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
         body: JSON.stringify({ topic: trimmed, rounds, language: lang }),
       });
       const data = await res.json();

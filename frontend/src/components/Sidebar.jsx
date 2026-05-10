@@ -1,6 +1,6 @@
 import { t, LANGS } from '../i18n.js';
 
-export default function Sidebar({ active, onNavigate, lang = 'en', onLangChange, notesCount = 0, onNotesToggle, theme = 'dark', onThemeChange }) {
+export default function Sidebar({ active, onNavigate, lang = 'en', onLangChange, notesCount = 0, onNotesToggle, theme = 'dark', onThemeChange, onHistoryToggle, historyOpen = false }) {
   const NAV = [
     { id: 'gps',        icon: 'explore',     label: t(lang, 'navGps'),        sub: t(lang, 'navGpsSub') },
     { id: 'quiz',       icon: 'quiz',        label: t(lang, 'navQuiz'),       sub: t(lang, 'navQuizSub') },
@@ -60,8 +60,24 @@ export default function Sidebar({ active, onNavigate, lang = 'en', onLangChange,
         })}
       </nav>
 
+      {/* History toggle */}
+      <div className="px-3 pb-1" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+        <button onClick={onHistoryToggle}
+          className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all mt-3"
+          style={historyOpen
+            ? { background: 'rgba(240,141,57,0.2)', border: '1px solid rgba(240,141,57,0.4)' }
+            : { background: 'rgba(255,255,255,0.06)', border: '1px solid rgba(255,255,255,0.1)' }}
+          onMouseEnter={e => { if (!historyOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.12)'; }}
+          onMouseLeave={e => { if (!historyOpen) e.currentTarget.style.background = 'rgba(255,255,255,0.06)'; }}>
+          <span className="material-symbols-outlined" style={{ color: historyOpen ? '#F08D39' : 'rgba(255,255,255,0.6)', fontSize: 18 }}>history</span>
+          <span className="text-sm font-medium flex-1 text-left" style={{ color: historyOpen ? '#F08D39' : 'rgba(255,255,255,0.8)' }}>
+            {lang === 'ar' ? 'السجل' : lang === 'es' ? 'Historial' : 'History'}
+          </span>
+        </button>
+      </div>
+
       {/* Notes toggle */}
-      <div className="px-3 pb-2" style={{ borderTop: '1px solid rgba(255,255,255,0.1)' }}>
+      <div className="px-3 pb-2">
         <button onClick={onNotesToggle}
           className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl transition-all mt-3"
           style={{ background: 'rgba(255,255,255,0.08)', border: '1px solid rgba(255,255,255,0.15)' }}

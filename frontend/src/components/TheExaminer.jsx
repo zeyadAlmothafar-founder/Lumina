@@ -1,5 +1,7 @@
 ﻿import { useState, useRef, useEffect, useCallback } from 'react';
 import { t } from '../i18n.js';
+import { useInferenceHeaders } from '../context/InferenceContext.jsx';
+import { saveSession } from '../db.js';
 
 // ── Voice Answer Button ────────────────────────────────────────────────────────
 const SpeechRecognition =
@@ -154,6 +156,7 @@ const GRADE_COLOR = { A: '#8BDFDD', B: '#F08D39', C: '#fbbf24', D: '#f97316', F:
 
 // ── Setup Screen ──────────────────────────────────────────────────────────────
 function SetupScreen({ onStart, lang = 'en', prefillSubject }) {
+  const inferenceHeaders = useInferenceHeaders();
   const [subject, setSubject]   = useState(prefillSubject || '');
   const [diff, setDiff]         = useState('intermediate');
   const [total, setTotal]       = useState(5);
@@ -172,7 +175,7 @@ function SetupScreen({ onStart, lang = 'en', prefillSubject }) {
     try {
       const res = await fetch('/api/examiner/start', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
         body: JSON.stringify({ subject: subject.trim(), difficulty: diff, totalQuestions: total, language: lang }),
       });
       const data = await res.json();
@@ -295,7 +298,8 @@ function SetupScreen({ onStart, lang = 'en', prefillSubject }) {
 }
 
 // ── Exam Screen ───────────────────────────────────────────────────────────────
-function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote }) {
+function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote, onSaveReport }) {
+  const inferenceHeaders = useInferenceHeaders();
   const [answer, setAnswer]         = useState('');
   const [inputMode, setInputMode]   = useState('voice'); // 'voice' | 'type' | 'photo'
   const [photoFile, setPhotoFile]   = useState(null);
@@ -326,6 +330,7 @@ function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote }) {
         form.append('image', photoFile);
         const res = await fetch(`/api/examiner/${exam.sessionId}/answer-image`, {
           method: 'POST',
+          headers: inferenceHeaders,
           body: form,
         });
         data = await res.json();
@@ -335,7 +340,7 @@ function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote }) {
       } else {
         const res = await fetch(`/api/examiner/${exam.sessionId}/answer`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
           body: JSON.stringify({ answer: answer.trim() }),
         });
         data = await res.json();
@@ -351,6 +356,7 @@ function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote }) {
           score: data.score, feedback: data.feedback, correctAnswer: data.correctAnswer,
         }];
         setHistory(updatedHistory);
+        if (onSaveReport) onSaveReport(exam.subject, updatedHistory, data.report);
         setTimeout(() => onFinish(data.report), 1800);
       }
     } catch (err) {
@@ -676,10 +682,14 @@ function ReportScreen({ report, onRetry, lang = 'en', onSaveNote }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function TheExaminer({ lang = 'en', onSaveNote, topicContext }) {
-  const [phase, setPhase] = useState('setup'); // 'setup' | 'exam' | 'report'
+export default function TheExaminer({ lang = 'en', onSaveNote, topicContext, initialData = null }) {
+  const [phase, setPhase] = useState(() => initialData?.report ? 'report' : 'setup');
   const [exam, setExam]   = useState(null);
-  const [report, setRep]  = useState(null);
+  const [report, setRep]  = useState(() => initialData?.report || null);
+
+  const handleSaveReport = useCallback((subject, history, rep) => {
+    saveSession('exam', subject, { subject, history, report: rep }).catch(() => {});
+  }, []);
 
   return (
     <div className="h-full flex flex-col overflow-hidden" style={{ background: 'var(--bg-page)' }}>
@@ -710,6 +720,7 @@ export default function TheExaminer({ lang = 'en', onSaveNote, topicContext }) {
             lang={lang}
             onSaveNote={onSaveNote}
             onFinish={(r) => { setRep(r); setPhase('report'); }}
+            onSaveReport={handleSaveReport}
           />
         )}
         {phase === 'report' && (

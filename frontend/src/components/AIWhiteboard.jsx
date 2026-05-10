@@ -4,6 +4,8 @@ import { exportToBlob } from '@excalidraw/excalidraw';
 import '@excalidraw/excalidraw/index.css';
 import { marked } from 'marked';
 import { t } from '../i18n.js';
+import { useInferenceHeaders } from '../context/InferenceContext.jsx';
+import { saveSession, updateSession } from '../db.js';
 
 marked.setOptions({ breaks: true, gfm: true });
 
@@ -55,11 +57,16 @@ const MD_STYLE = `
 .wb-md hr { border: none; border-top: 1px solid rgba(var(--b-rgb),0.1); margin: 0.5rem 0; }
 `;
 
-export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark' }) {
+export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark', initialData = null }) {
+  const inferenceHeaders = useInferenceHeaders();
+  const dbIdRef = useRef(null); // tracks the Dexie row id for upsert
+
   const [excalidrawAPI, setExcalidrawAPI] = useState(null);
-  const [messages, setMessages]           = useState(() => [
-    { id: nextId(), role: 'model', text: t(lang, 'wbWelcome') },
-  ]);
+  const [messages, setMessages]           = useState(() =>
+    initialData?.messages?.length
+      ? initialData.messages
+      : [{ id: nextId(), role: 'model', text: t(lang, 'wbWelcome') }]
+  );
   const [input, setInput]       = useState('');
   const [loading, setLoading]   = useState(false);
   const [snapshot, setSnapshot] = useState(null);
@@ -164,7 +171,7 @@ export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark' }
 
       const res = await fetch('/api/whiteboard/chat', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
         body: JSON.stringify({
           message: userMsg.text,
           imageBase64: capturedSnapshot?.base64 || null,
@@ -175,7 +182,19 @@ export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark' }
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed');
-      setMessages(prev => [...prev, { id: nextId(), role: 'model', text: data.reply }]);
+      const aiMsg = { id: nextId(), role: 'model', text: data.reply };
+      setMessages(prev => {
+        const next = [...prev, aiMsg];
+        // Upsert: create on first save, update thereafter
+        if (dbIdRef.current == null) {
+          saveSession('whiteboard', userMsg.text.slice(0, 60) || 'Whiteboard chat', { messages: next })
+            .then(id => { dbIdRef.current = id; })
+            .catch(() => {});
+        } else {
+          updateSession(dbIdRef.current, { messages: next }).catch(() => {});
+        }
+        return next;
+      });
     } catch (err) {
       setMessages(prev => [...prev, { id: nextId(), role: 'model', text: `⚠️ ${err.message}` }]);
     } finally {

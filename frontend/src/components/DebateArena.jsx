@@ -2,6 +2,7 @@
 import AgentColumn from './AgentColumn.jsx';
 import MicButton from './MicButton.jsx';
 import { t } from '../i18n.js';
+import { useInference, useInferenceHeaders } from '../context/InferenceContext.jsx';
 
 function getAgents(lang) {
   return [
@@ -55,11 +56,15 @@ function reducer(s, a) {
 }
 
 export default function DebateArena({ session, onSynthesized, lang = 'en' }) {
+  const inferenceMode    = useInference();
+  const inferenceHeaders = useInferenceHeaders();
+
   const [state, dispatch]      = useReducer(reducer, undefined, init);
   const [activeTab, setActiveTab] = useState(1);
   const [interruptOpen, setInterruptOpen] = useState(false);
   const [interruptText, setInterruptText] = useState('');
   const [interruptTarget, setInterruptTarget] = useState('all');
+  const [localSeqMsg, setLocalSeqMsg] = useState(null); // message shown when agents run sequentially
 
   const esRef           = useRef(null);
   const liveRef         = useRef(EMPTY_T);
@@ -81,7 +86,9 @@ export default function DebateArena({ session, onSynthesized, lang = 'en' }) {
 
     let url = `/api/session/${session.sessionId}/stream?round=${roundNum}`;
     if (interruptTxt) url += `&interrupt=${encodeURIComponent(interruptTxt)}&target=${target || 'all'}`;
+    if (inferenceMode === 'local') url += '&mode=local';
 
+    setLocalSeqMsg(null);
     const es = new EventSource(url);
     esRef.current = es;
 
@@ -90,11 +97,17 @@ export default function DebateArena({ session, onSynthesized, lang = 'en' }) {
       liveRef.current = { ...liveRef.current, [agent]: liveRef.current[agent] + text };
       dispatch({ type: 'TOKEN', agent, text });
     });
+    es.addEventListener('local_sequential', e => {
+      const { message } = JSON.parse(e.data);
+      setLocalSeqMsg(message);
+    });
     es.addEventListener('round_complete', () => {
+      setLocalSeqMsg(null);
       dispatch({ type: 'ROUND_COMPLETE', tokens: { ...liveRef.current }, hadInterrupt });
       es.close();
     });
     es.addEventListener('error', () => {
+      setLocalSeqMsg(null);
       dispatch({ type: 'ROUND_COMPLETE', tokens: { ...liveRef.current }, hadInterrupt });
       es.close();
     });
@@ -124,7 +137,10 @@ export default function DebateArena({ session, onSynthesized, lang = 'en' }) {
   const handleSynthesize = async () => {
     dispatch({ type: 'SYNTHESIZING', value: true });
     try {
-      const res = await fetch(`/api/session/${session.sessionId}/synthesize`, { method: 'POST' });
+      const res = await fetch(`/api/session/${session.sessionId}/synthesize`, {
+        method: 'POST',
+        headers: inferenceHeaders,
+      });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       onSynthesized(data.outline);
@@ -216,6 +232,15 @@ export default function DebateArena({ session, onSynthesized, lang = 'en' }) {
         <div className="flex-shrink-0 px-5 py-2 text-sm font-medium"
              style={{ background:'rgba(240,141,57,0.1)', borderBottom:'1px solid rgba(240,141,57,0.2)', color:'#F08D39' }}>
           {t(lang, 'debateYouSaid')} <em>"{state.interruptBanner}"</em>
+        </div>
+      )}
+
+      {/* Local sequential mode notice */}
+      {localSeqMsg && (
+        <div className="flex-shrink-0 flex items-center gap-2 px-5 py-2 text-xs"
+             style={{ background:'rgba(56,82,180,0.1)', borderBottom:'1px solid rgba(56,82,180,0.2)', color:'#93c5fd' }}>
+          <span className="animate-pulse">🖥</span>
+          <span>{localSeqMsg} — agents respond one after another.</span>
         </div>
       )}
 

@@ -1,5 +1,7 @@
 ﻿import { useState } from 'react';
 import { t } from '../i18n.js';
+import { useInferenceHeaders } from '../context/InferenceContext.jsx';
+import { saveSession } from '../db.js';
 
 const WEEK_OPTIONS  = [1,2,3,4,6,8,12];
 const HOURS_OPTIONS = [0.5,1,1.5,2,3,4];
@@ -124,13 +126,14 @@ function WeekCard({ data, index, isExpanded, onToggle, lang, onSaveNote, onLaunc
   );
 }
 
-export default function LearningGPS({ lang = 'en', onSaveNote = () => {}, onLaunchTopic = () => {} }) {
-  const [goal, setGoal]         = useState('');
-  const [weeks, setWeeks]       = useState(4);
-  const [hours, setHours]       = useState(1);
+export default function LearningGPS({ lang = 'en', onSaveNote = () => {}, onLaunchTopic = () => {}, initialData = null }) {
+  const inferenceHeaders = useInferenceHeaders();
+  const [goal, setGoal]         = useState(initialData?.goal   || '');
+  const [weeks, setWeeks]       = useState(initialData?.weeks  || 4);
+  const [hours, setHours]       = useState(initialData?.hours  || 1);
   const [loading, setLoading]   = useState(false);
   const [error, setError]       = useState('');
-  const [roadmap, setRoadmap]   = useState(null);
+  const [roadmap, setRoadmap]   = useState(initialData?.roadmap || null);
   const [expanded, setExpanded] = useState(new Set([1]));
 
   const toggle = (w) => setExpanded(prev => {
@@ -142,12 +145,15 @@ export default function LearningGPS({ lang = 'en', onSaveNote = () => {}, onLaun
     setLoading(true); setError(''); setRoadmap(null);
     try {
       const res = await fetch('/api/gps/generate', {
-        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
         body: JSON.stringify({ goal: goal.trim(), weeks, hoursPerDay: hours, language: lang }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error);
       setRoadmap(data); setExpanded(new Set([1]));
+      // Persist to local history
+      saveSession('gps', goal.trim(), { goal: goal.trim(), weeks, hours, roadmap: data }).catch(() => {});
     } catch (err) { setError(err.message); }
     finally { setLoading(false); }
   };

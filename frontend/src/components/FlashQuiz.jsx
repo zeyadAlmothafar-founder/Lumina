@@ -1,5 +1,7 @@
 ﻿import { useState, useCallback, useRef } from 'react';
 import { t } from '../i18n.js';
+import { useInferenceHeaders } from '../context/InferenceContext.jsx';
+import { saveSession } from '../db.js';
 
 const COUNT_OPTIONS = [5, 10, 15, 20];
 const DIFF_STYLE = {
@@ -344,14 +346,15 @@ function ImageUploadZone({ images, onImages, lang = 'en' }) {
 }
 
 // ── Main Component ────────────────────────────────────────────────────────────
-export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext }) {
-  const [inputTab, setInputTab]   = useState('text');      // 'text' | 'images'
-  const [topic, setTopic]         = useState(topicContext?.topic || '');
+export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext, initialData = null }) {
+  const inferenceHeaders = useInferenceHeaders();
+  const [inputTab, setInputTab]   = useState('text');
+  const [topic, setTopic]         = useState(initialData?.topic || topicContext?.topic || '');
   const [images, setImages]       = useState([]);
-  const [count, setCount]         = useState(10);
+  const [count, setCount]         = useState(initialData?.count || 10);
   const [loading, setLoad]        = useState(false);
   const [error, setError]         = useState('');
-  const [cards, setCards]         = useState(null);
+  const [cards, setCards]         = useState(initialData?.cards || null);
   const [mode, setMode]           = useState('study');      // 'study' | 'quiz' | 'results'
   const [cardIdx, setIdx]         = useState(0);
   const [results, setRes]         = useState([]);
@@ -366,7 +369,7 @@ export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext }) {
       if (inputTab === 'text') {
         const res = await fetch('/api/quiz/generate', {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: { 'Content-Type': 'application/json', ...inferenceHeaders },
           body: JSON.stringify({ topic: topic.trim(), count, language: lang }),
         });
         const data = await res.json();
@@ -377,7 +380,7 @@ export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext }) {
         images.forEach(img => form.append('images', img));
         form.append('count', String(count));
         form.append('language', lang);
-        const res = await fetch('/api/quiz/from-images', { method: 'POST', body: form });
+        const res = await fetch('/api/quiz/from-images', { method: 'POST', body: form, headers: inferenceHeaders });
         const data = await res.json();
         if (!res.ok) throw new Error(data.error);
         arr = Array.isArray(data) ? data : data.cards;
@@ -386,12 +389,14 @@ export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext }) {
       setCards(arr);
       setMode('study');
       setIdx(0);
+      // Persist to local history
+      saveSession('quiz', topic.trim() || 'Image flashcards', { topic: topic.trim(), count, cards: arr }).catch(() => {});
     } catch (err) {
       setError(err.message);
     } finally {
       setLoad(false);
     }
-  }, [inputTab, topic, images, count, lang]);
+  }, [inputTab, topic, images, count, lang, inferenceHeaders]);
 
   const canGenerate = inputTab === 'text' ? !!topic.trim() : images.length > 0;
 

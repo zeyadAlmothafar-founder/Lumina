@@ -7,6 +7,19 @@ import { searchWikipedia, fetchExtracts } from './services/wikipedia.js';
 import { generateDebateRound, generateSynthesis } from './services/gemma.js';
 import { generateDocx } from './services/docx.js';
 import { generateRoadmap, generateFlashcards, generateFirstQuestion, evaluateAndContinue, generateFlashcardsFromImages, transcribeHandwriting, chatWithWhiteboard } from './services/tools.js';
+import * as ollamaService from './services/ollama.js';
+
+// Pick the right service based on the X-Inference-Mode request header
+function svc(req) {
+  return req.headers['x-inference-mode'] === 'local' ? ollamaService : null;
+}
+// Shorthand tool-function resolver
+function tool(req, name) {
+  const s = svc(req);
+  if (s) return s[name].bind(s);
+  const tools = { generateRoadmap, generateFlashcards, generateFirstQuestion, evaluateAndContinue, generateFlashcardsFromImages, transcribeHandwriting, chatWithWhiteboard };
+  return tools[name];
+}
 
 // Prevent stray rejected promises from crashing the server
 process.on('unhandledRejection', (reason) => {
@@ -24,7 +37,7 @@ app.post('/api/gps/generate', async (req, res) => {
   const { goal, weeks = 4, hoursPerDay = 1, language = 'en' } = req.body;
   if (!goal?.trim()) return res.status(400).json({ error: 'Goal is required' });
   try {
-    const roadmap = await generateRoadmap({ goal: goal.trim(), weeks: Number(weeks), hoursPerDay: Number(hoursPerDay), language });
+    const roadmap = await tool(req, 'generateRoadmap')({ goal: goal.trim(), weeks: Number(weeks), hoursPerDay: Number(hoursPerDay), language });
     res.json(roadmap);
   } catch (err) {
     console.error('[gps]', err);
@@ -37,7 +50,7 @@ app.post('/api/quiz/generate', async (req, res) => {
   const { topic, count = 10, language = 'en' } = req.body;
   if (!topic?.trim()) return res.status(400).json({ error: 'Topic is required' });
   try {
-    const cards = await generateFlashcards({ topic: topic.trim(), count: Number(count), language });
+    const cards = await tool(req, 'generateFlashcards')({ topic: topic.trim(), count: Number(count), language });
     res.json({ cards });
   } catch (err) {
     console.error('[quiz]', err);
@@ -54,7 +67,7 @@ app.post('/api/quiz/from-images', upload.array('images', 5), async (req, res) =>
       mimeType: f.mimetype,
       data: f.buffer.toString('base64'),
     }));
-    const cards = await generateFlashcardsFromImages({ images, count: Number(count), language });
+    const cards = await tool(req, 'generateFlashcardsFromImages')({ images, count: Number(count), language });
     res.json({ cards });
   } catch (err) {
     console.error('[quiz/from-images]', err);
@@ -69,7 +82,7 @@ app.post('/api/examiner/start', async (req, res) => {
   const { subject, difficulty = 'intermediate', totalQuestions = 5, language = 'en' } = req.body;
   if (!subject?.trim()) return res.status(400).json({ error: 'Subject is required' });
   try {
-    const firstQ = await generateFirstQuestion({ subject: subject.trim(), difficulty, language });
+    const firstQ = await tool(req, 'generateFirstQuestion')({ subject: subject.trim(), difficulty, language });
     const sessionId = uuidv4();
     examSessions.set(sessionId, {
       subject: subject.trim(), difficulty, language,
@@ -94,7 +107,7 @@ app.post('/api/examiner/:id/answer', async (req, res) => {
   last.answer = answer.trim();
 
   try {
-    const result = await evaluateAndContinue({
+    const result = await tool(req, 'evaluateAndContinue')({
       subject: session.subject,
       difficulty: session.difficulty,
       history: session.history,
@@ -132,7 +145,7 @@ app.post('/api/examiner/:id/answer-image', upload.single('image'), async (req, r
 
   try {
     // Step 1: transcribe handwriting via Gemma 4 multimodal
-    const transcribed = await transcribeHandwriting({
+    const transcribed = await tool(req, 'transcribeHandwriting')({
       imageBase64: req.file.buffer.toString('base64'),
       mimeType: req.file.mimetype,
     });
@@ -140,7 +153,7 @@ app.post('/api/examiner/:id/answer-image', upload.single('image'), async (req, r
     // Step 2: evaluate the transcribed answer using the existing flow
     last.answer = transcribed;
 
-    const result = await evaluateAndContinue({
+    const result = await tool(req, 'evaluateAndContinue')({
       subject: session.subject,
       difficulty: session.difficulty,
       history: session.history,
@@ -176,7 +189,7 @@ app.post('/api/whiteboard/chat', async (req, res) => {
     return res.status(400).json({ error: 'A message or whiteboard snapshot is required' });
   }
   try {
-    const reply = await chatWithWhiteboard({
+    const reply = await tool(req, 'chatWithWhiteboard')({
       message: message?.trim() || '',
       imageBase64,
       mimeType,
@@ -255,24 +268,22 @@ app.get('/api/session/:id/stream', async (req, res) => {
 
   send('round_start', { round: roundNum, interrupt: interrupt ?? null, target: interruptTarget });
 
+  // EventSource cannot set custom headers — accept mode as query param too
+  const isLocal = req.headers['x-inference-mode'] === 'local' || req.query.mode === 'local';
+  const debateRound = isLocal ? ollamaService.generateDebateRound : generateDebateRound;
+
   try {
-    // Only pass the interrupt to agents that are targeted
     const agentInterrupt = (agentId) => {
       if (!interrupt) return null;
       if (interruptTarget === 'all' || interruptTarget === agentId) return interrupt;
       return null;
     };
 
-    // Each agent handles its own failure — prevents orphaned unhandled rejections
-    // when Promise.all fast-fails and the other delayed promises keep running.
-    const delay = (ms) => new Promise(r => setTimeout(r, ms));
-
-    const runAgent = async (type, delayMs) => {
-      if (delayMs) await delay(delayMs);
+    const runAgent = async (type) => {
       try {
-        return await generateDebateRound(
+        return await debateRound(
           type, session, roundNum, agentInterrupt(type),
-          t => send('token', { agent: type, text: t }),
+          tok => send('token', { agent: type, text: tok }),
         );
       } catch (err) {
         console.error(`[agent ${type} round=${roundNum}]`, err);
@@ -282,11 +293,23 @@ app.get('/api/session/:id/stream', async (req, res) => {
       }
     };
 
-    const [devil, consensus, factchecker] = await Promise.all([
-      runAgent('devil',       0),
-      runAgent('consensus',   2000),
-      runAgent('factchecker', 5000),
-    ]);
+    let devil, consensus, factchecker;
+
+    if (isLocal) {
+      // Local Ollama: run sequentially so one model call finishes before the next
+      send('local_sequential', { message: 'Running agents sequentially (local mode)…' });
+      devil       = await runAgent('devil');
+      consensus   = await runAgent('consensus');
+      factchecker = await runAgent('factchecker');
+    } else {
+      // Cloud API: run all three agents in parallel with staggered starts
+      const delay = ms => new Promise(r => setTimeout(r, ms));
+      [devil, consensus, factchecker] = await Promise.all([
+        runAgent('devil'),
+        delay(2000).then(() => runAgent('consensus')),
+        delay(5000).then(() => runAgent('factchecker')),
+      ]);
+    }
 
     session.history.push({ round: roundNum, interrupt, devil, consensus, factchecker });
 
@@ -310,7 +333,8 @@ app.post('/api/session/:id/synthesize', async (req, res) => {
   if (!session.history.length) return res.status(400).json({ error: 'No debate history yet' });
 
   try {
-    const outline = await generateSynthesis(session);
+    const synthFn = req.headers['x-inference-mode'] === 'local' ? ollamaService.generateSynthesis : generateSynthesis;
+    const outline = await synthFn(session);
     session.synthesis = outline;
     res.json({ outline });
   } catch (err) {
