@@ -174,7 +174,7 @@ PORT=3001
 
 # Local inference (optional — only needed if you use the Local toggle)
 OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL_LOCAL=gemma4
+OLLAMA_MODEL_LOCAL=gemma4:e4b
 ```
 
 Start the backend:
@@ -214,7 +214,7 @@ Download and install from **[ollama.com](https://ollama.com)**. After installati
 ### Step 2 — Pull the Gemma 4 model
 
 ```bash
-ollama pull gemma4
+ollama pull gemma4:e4b
 ```
 
 This downloads the model (several GB — size depends on the variant). Wait for it to finish before switching the toggle.
@@ -228,7 +228,7 @@ ollama list
 Copy the exact model name from the `NAME` column (e.g., `gemma4:e4b`) and set it in `backend/.env`:
 
 ```env
-OLLAMA_MODEL_LOCAL=gemma4
+OLLAMA_MODEL_LOCAL=gemma4:e4b
 ```
 
 Replace `gemma4` with the exact name shown by `ollama list` if different.
@@ -308,19 +308,6 @@ lumina/
 ```
 
 ---
-
-## Kaggle Submission
-
-**Subtitle:** Five Gemma 4-powered study tools in one app — roadmap, flashcards, debate arena, adaptive exam, and AI whiteboard — with cloud and fully local inference.
-
-**Project Description:**
-
-Lumina is a full-stack AI study suite built on Gemma 4 31B for the Future of Education track. Students interact with five deeply integrated tools that cover the complete learning loop: generate a personalised week-by-week learning roadmap (Learning GPS), study with AI-generated flashcards from text or handwritten notes (Flash & Quiz), debate any topic with three specialised AI agents grounded in real Wikipedia sources (AgentDebate), take an adaptive oral exam answered by voice, typing, or handwritten photo (The Examiner), and sketch on a live Excalidraw canvas while asking Gemma to analyse the drawing (AI Whiteboard).
-
-Gemma 4's multimodal capabilities are central: vision reads handwritten answers and whiteboard sketches, structured JSON output drives every quiz and exam question, and real-time streaming powers the live debate. The app supports three languages (English, Spanish, Arabic with full RTL layout) and runs with either the Google AI Studio API or a fully local Ollama instance — no data leaves the device in local mode. Session history is persisted in IndexedDB so learners can pick up any previous session exactly where they left off.
-
----
-
 ## License
 
 This project is licensed under the **Creative Commons Attribution 4.0 International (CC-BY 4.0)** license, as required by the Gemma 4 Good Hackathon competition rules.
