@@ -67,6 +67,20 @@ function parseJSON(raw) {
   throw new Error('Ollama returned non-JSON: ' + s.slice(0, 300));
 }
 
+// If Ollama wraps the array in an object (e.g. {"cards":[...]}) unwrap it
+function extractArray(parsed) {
+  if (Array.isArray(parsed)) return parsed;
+  if (parsed && typeof parsed === 'object') {
+    for (const key of ['cards', 'flashcards', 'questions', 'items', 'data', 'results']) {
+      if (Array.isArray(parsed[key])) return parsed[key];
+    }
+    // Last resort: return first array-valued property found
+    const arr = Object.values(parsed).find(v => Array.isArray(v));
+    if (arr) return arr;
+  }
+  throw new Error('Ollama response is not an array: ' + JSON.stringify(parsed).slice(0, 200));
+}
+
 function langNote(lang) {
   if (!lang || lang === 'en') return '';
   return ` Respond entirely in ${LANG_NAMES[lang] || lang}.`;
@@ -101,7 +115,7 @@ export async function generateFlashcards({ topic, count = 10, language = 'en' })
       content: `Topic: "${topic}" | Cards: ${count}. OUTPUT ONLY JSON ARRAY.`,
     },
   ], { jsonMode: true, maxTokens: 3000 });
-  return parseJSON(raw);
+  return extractArray(parseJSON(raw));
 }
 
 export async function generateFlashcardsFromImages({ images, count = 10, language = 'en' }) {
@@ -117,7 +131,7 @@ export async function generateFlashcardsFromImages({ images, count = 10, languag
       images: images.map(img => img.data),
     },
   ], { jsonMode: true, maxTokens: 3000 });
-  return parseJSON(raw);
+  return extractArray(parseJSON(raw));
 }
 
 // ── The Examiner ──────────────────────────────────────────────────────────────

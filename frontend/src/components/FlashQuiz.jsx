@@ -386,6 +386,7 @@ export default function FlashQuiz({ lang = 'en', onSaveNote, topicContext, initi
         arr = Array.isArray(data) ? data : data.cards;
       }
 
+      if (!Array.isArray(arr) || arr.length === 0) throw new Error('Model returned no cards — try again.');
       setCards(arr);
       setMode('study');
       setIdx(0);

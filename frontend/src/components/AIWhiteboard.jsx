@@ -244,12 +244,22 @@ export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark', 
   }, [lang]);
 
   // ── Render ──────────────────────────────────────────────────────────────────
+  // Layout: [Excalidraw canvas flex-1] [drag handle] [Chat panel fixed-width]
+  // Chat is always on the inline-end side (right in LTR, left in RTL) via flex row.
+  const isRtl = lang === 'ar';
+
   return (
-    <div className="h-full flex overflow-hidden" style={{ background: 'var(--bg-page)' }}>
+    <div style={{
+      position: 'absolute', inset: 0,
+      display: 'flex',
+      flexDirection: isRtl ? 'row-reverse' : 'row',
+      overflow: 'hidden',
+      background: 'var(--bg-page)',
+    }}>
       <style>{MD_STYLE}</style>
 
       {/* ── Excalidraw canvas ─────────────────────────────────────────────── */}
-      <div className="flex-1 min-w-0 relative">
+      <div style={{ flex: '1 1 0', minWidth: 0, position: 'relative' }}>
         <Excalidraw
           excalidrawAPI={api => setExcalidrawAPI(api)}
           theme={theme}
@@ -265,7 +275,7 @@ export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark', 
           }}
         />
         {/* Hint badge */}
-        <div className="absolute bottom-4 left-1/2 -translate-x-1/2 pointer-events-none z-10">
+        <div style={{ position: 'absolute', bottom: 16, left: '50%', transform: 'translateX(-50%)', pointerEvents: 'none', zIndex: 10 }}>
           <div className="flex items-center gap-2 px-3 py-1.5 rounded-full text-xs"
                style={{ background: 'rgba(26,16,8,0.75)', border: '1px solid rgba(240,141,57,0.2)', color: 'rgba(var(--t-rgb),0.45)', backdropFilter: 'blur(8px)' }}>
             📸 {t(lang, 'wbSnapshotTip')}
@@ -297,7 +307,7 @@ export default function AIWhiteboard({ lang = 'en', onSaveNote, theme = 'dark', 
         style={{
           width: chatWidth,
           background: 'var(--bg-chat-panel)',
-          borderLeft: '1px solid rgba(240,141,57,0.1)',
+          borderInlineStart: '1px solid rgba(240,141,57,0.1)',
         }}
       >
         {/* Header */}

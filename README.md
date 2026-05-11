@@ -1,6 +1,6 @@
 # Lumina — AI Study Suite powered by Gemma 4
 
-> **5 AI-powered study tools in one app — learning roadmap, flashcards, Socratic debate arena, adaptive exam & AI whiteboard — all running on Gemma 4 31B.**
+> **5 AI-powered study tools in one app — learning roadmap, flashcards, Socratic debate arena, adaptive exam & AI whiteboard — running on Gemma 4 31B via cloud or fully local Ollama inference.**
 
 Built for the **Gemma 4 Good Hackathon · Future of Education track** · May 2026
 
@@ -41,13 +41,34 @@ An adaptive oral exam powered by Gemma 4. Answer questions by:
 - **Typing** — classic text input with Ctrl+Enter to submit
 - **Photo** — photograph your handwritten answer; Gemma 4 reads the handwriting via vision
 
-The difficulty adapts in real time — harder questions when you score high, probing follow-ups when you miss. Every session ends with a graded report: overall score, grade, strengths, areas to improve, and study recommendations.
+The difficulty adapts in real time — harder questions when you score high, probing follow-ups when you miss. Every session ends with a graded report: overall score out of the full mark, grade (A–F), strengths, areas to improve, and study recommendations.
 
 ### 🎨 AI Whiteboard
-A full **Excalidraw** canvas with a Gemma 4 chat panel on the side. Draw diagrams, sketch equations, write notes — then **snapshot the board** and ask Gemma anything about it. Gemma 4's vision capability reads and explains whatever is on your canvas. The chat history persists across the session for multi-turn dialogue about your work.
+A full **Excalidraw** canvas with a Gemma 4 chat panel on the side. Draw diagrams, sketch equations, write notes — then **snapshot the board** and ask Gemma anything about it. Gemma 4's vision capability reads and explains whatever is on your canvas. The chat history persists across the session for multi-turn dialogue about your work. The chat panel sits on the right in English and left in Arabic (full RTL support).
 
 ### 🗒️ Notes Panel
 Save any output — roadmap weeks, flashcard sets, exam reports, whiteboard answers — to a persistent in-session notes panel. Download everything as a plain text file.
+
+---
+
+## New in This Release
+
+### 🖥️ Local Inference via Ollama
+Run every AI feature entirely on your own machine — no API key, no cloud, no data leaves your device.
+
+A **☁️ Cloud / 🖥️ Local** toggle sits in the top bar of the app. Switching to Local routes all requests through a local [Ollama](https://ollama.com) instance instead of Google AI Studio.
+
+**Important — Debate Arena in local mode:** Because a single Ollama process can only run one request efficiently at a time, the three debate agents (Critical Challenger, Consensus Builder, Fact-Checker) run **sequentially** in local mode instead of in parallel. A status banner appears in the arena to let you know. All other features (GPS, Flash & Quiz, Examiner, Whiteboard) behave identically in both modes.
+
+When you switch to Local the first time, a modal explains these details before anything changes.
+
+### 📚 Session History
+Every completed session is automatically saved to your browser's local storage (IndexedDB via Dexie.js) — nothing is sent to any server.
+
+- **Auto-saved** after: a GPS roadmap is generated, flashcards are generated, an exam report is completed, each AI reply in the Whiteboard, and a Debate synthesis is produced.
+- **History panel** — click the **History** button in the sidebar to open a slide-in panel listing all past sessions, sorted newest-first, grouped by feature with colour-coded icons and relative timestamps.
+- **Restore any session** — click a history entry to jump straight back to that feature with your previous results loaded (roadmap, cards, exam report, whiteboard chat, or debate synthesis).
+- **Delete** individual sessions with the hover delete button, or **Clear all** from the panel footer.
 
 ---
 
@@ -55,13 +76,15 @@ Save any output — roadmap weeks, flashcard sets, exam reports, whiteboard answ
 
 | Layer | Technology | Notes |
 |---|---|---|
-| LLM | **Gemma 4 31B IT** (`gemma-4-31b-it`) | Via Google AI Studio API |
+| LLM (cloud) | **Gemma 4 31B IT** (`gemma-4-31b-it`) | Via Google AI Studio API |
+| LLM (local) | **Gemma 4 via Ollama** | Fully on-device, no API key needed |
 | Backend | Node.js 18 + Express | REST + SSE |
 | Frontend | React 18 + Vite + Tailwind CSS | |
 | Canvas | **Excalidraw** | Full drawing/diagramming canvas |
 | Real-time | **Server-Sent Events (SSE)** | Live token streaming for the debate |
 | Knowledge / RAG | **Wikipedia REST API** | No key required — free & open |
 | Speech input | **Web Speech API** | Browser-native, runs entirely on-device |
+| Session storage | **Dexie.js** (IndexedDB) | Local persistent session history |
 | Export | `docx` npm package | Essay outline → formatted Word file |
 | Languages | English · Español · العربية | Full RTL support for Arabic |
 
@@ -74,38 +97,45 @@ Every AI feature calls the same model through the `@google/generative-ai` SDK:
 
 - **JSON mode** (`responseMimeType: 'application/json'`) forces structured output for roadmaps, flashcards, exam questions, and grading reports — no fragile regex parsing needed.
 - **System instructions** separate the output schema from the user data prompt, preventing the model from echoing the schema instead of filling it in.
-- **Vision** is used in Flash & Quiz (read handwritten note images → flashcards) and The Examiner (read handwritten answer photos → grade them) and AI Whiteboard (read whiteboard snapshots → explain/analyse).
+- **Vision** is used in Flash & Quiz (read handwritten note images → flashcards), The Examiner (read handwritten answer photos → grade them), and AI Whiteboard (read whiteboard snapshots → explain/analyse).
 - **Multi-turn conversation** is used in The Examiner (adaptive questioning over a full exam session) and AI Whiteboard (persistent chat about the canvas).
 - **Streaming** (`generateContentStream`) powers live token-by-token output in the debate arena. A non-streaming fallback kicks in automatically if the stream fails.
-- **Retry logic** with a flat 2-second backoff handles transient 500 errors, across all features (3 streaming attempts + 5 non-streaming fallback attempts for debate agents; 3 attempts for all other tools).
+- **Retry logic** with a flat 2-second backoff handles transient 500 errors across all features.
+
+### Local Inference via Ollama
+When the user switches to **Local** mode, all backend routes call the [Ollama native chat API](https://ollama.com) (`POST http://localhost:11434/api/chat`) instead of Google AI Studio. The backend service (`backend/services/ollama.js`) mirrors every function signature from the cloud services so the rest of the backend code doesn't change — just the routing.
+
+- **Structured JSON** is requested using Ollama's `format: "json"` option, with a robust fallback parser that extracts arrays or objects from any wrapper shape the model might return.
+- **Streaming** uses Ollama's NDJSON stream format for live debate token delivery.
+- **Vision** is supported for models with vision weights (handwriting transcription and whiteboard snapshots).
+- **Sequential debate**: Ollama runs one inference at a time efficiently, so debate agents run one after another. The server sends a `local_sequential` SSE event to show a notice in the UI.
 
 ### Wikipedia REST API
-Used as the knowledge base for the Fact-Checker debate agent. When a debate session starts, the backend calls `en.wikipedia.org/w/api.php` to:
-1. **Search** for the top 5 Wikipedia articles related to the topic
-2. **Fetch** the intro extract (up to 1,500 chars) of the top 3 results
-
-These extracts are injected into the Fact-Checker's system prompt as grounded sources. The agent is instructed to cite claims with `[Source: Title]` and to challenge any unsourced assertion from the other agents. No API key required — the Wikipedia API is free and open.
+Used as the knowledge base for the Fact-Checker debate agent. When a debate session starts, the backend calls `en.wikipedia.org/w/api.php` to search for the top 5 Wikipedia articles related to the topic, then fetches the intro extract (up to 1,500 chars) of the top 3 results. These extracts are injected into the Fact-Checker's system prompt as grounded sources. No API key required.
 
 ### Excalidraw
-The AI Whiteboard feature embeds the full Excalidraw React component as a first-class drawing canvas. When the user clicks **Snapshot**, the app uses Excalidraw's `exportToBlob` utility to render the current canvas to a PNG, converts it to base64, and sends it to Gemma 4 alongside the user's chat message. Gemma 4 responds with a vision-based analysis of whatever is drawn.
+The AI Whiteboard feature embeds the full Excalidraw React component as a drawing canvas. When the user clicks **Snapshot**, the app uses Excalidraw's `exportToBlob` utility to render the current canvas to a PNG, converts it to base64, and sends it to Gemma 4 alongside the user's chat message for vision-based analysis.
 
 ### Web Speech API (browser-native speech recognition)
-Speech input is processed **entirely in the browser** — no audio is sent to any server. The app uses `window.SpeechRecognition` (or `window.webkitSpeechRecognition` for Chrome/Edge compatibility):
+Speech input is processed **entirely in the browser** — no audio is sent to any server. Used in The Examiner (speak answers), AgentDebate (voice interrupts), and AI Whiteboard (voice chat input). The recognition language matches the app's selected language (`en-US`, `es-ES`, or `ar-SA`).
 
-- In **The Examiner**: the student holds a mic button, speaks their answer, and the transcript is sent to Gemma 4 for grading. The language of recognition matches the app's selected language (`en-US`, `es-ES`, or `ar-SA`).
-- In **AgentDebate**: the student holds a mic button to interrupt the agents mid-debate; the transcript is injected into the next debate round.
-- In **AI Whiteboard**: voice input populates the chat text field before sending to Gemma 4.
+> **Note:** Web Speech API requires Chrome or Edge. Firefox is not supported by this API.
 
-> **Note:** Web Speech API requires Chrome or Edge. Firefox is not supported by this API. The app shows a fallback message on unsupported browsers.
+### Dexie.js (IndexedDB session history)
+Session data is stored locally in the browser using [Dexie.js](https://dexie.org), a lightweight IndexedDB wrapper. Each saved session stores: type (gps / quiz / exam / debate / whiteboard), a human-readable title, the full session data payload, and a timestamp. No data is sent to any server — everything stays on the user's device. Sessions persist across page refreshes and browser restarts until the user deletes them.
 
 ---
 
 ## Prerequisites
 
 - **Node.js v18 or later** — [download](https://nodejs.org/)
-- **A free Google AI Studio API key** — [get one here](https://aistudio.google.com/apikey) (the free quota is more than enough for personal use)
+- **A free Google AI Studio API key** — [get one here](https://aistudio.google.com/apikey) *(only needed for cloud mode)*
 - **Chrome or Edge** for voice input features (other browsers work for everything else)
 - **Git** — [download](https://git-scm.com/)
+
+**For local inference (optional):**
+- **Ollama** — [download from ollama.com](https://ollama.com)
+- The **Gemma 4** model pulled in Ollama (see local setup below)
 
 ---
 
@@ -141,6 +171,10 @@ Open `backend/.env` and paste your API key:
 GOOGLE_AI_KEY=your_google_ai_studio_key_here
 GEMMA_MODEL=gemma-4-31b-it
 PORT=3001
+
+# Local inference (optional — only needed if you use the Local toggle)
+OLLAMA_BASE_URL=http://localhost:11434
+OLLAMA_MODEL_LOCAL=gemma4
 ```
 
 Start the backend:
@@ -169,6 +203,72 @@ Go to **[http://localhost:5173](http://localhost:5173)**.
 
 ---
 
+## Setting Up Local Inference (Ollama)
+
+To use the **🖥️ Local** toggle in the app, you need Ollama running with a Gemma 4 model.
+
+### Step 1 — Install Ollama
+
+Download and install from **[ollama.com](https://ollama.com)**. After installation, Ollama starts automatically on `http://localhost:11434`. You can verify it's running by opening that URL in your browser — it should say **"Ollama is running"**.
+
+### Step 2 — Pull the Gemma 4 model
+
+```bash
+ollama pull gemma4
+```
+
+This downloads the model (several GB — size depends on the variant). Wait for it to finish before switching the toggle.
+
+To see which models you have available:
+
+```bash
+ollama list
+```
+
+Copy the exact model name from the `NAME` column (e.g., `gemma4:e4b`) and set it in `backend/.env`:
+
+```env
+OLLAMA_MODEL_LOCAL=gemma4
+```
+
+Replace `gemma4` with the exact name shown by `ollama list` if different.
+
+### Step 3 — Restart the backend and switch the toggle
+
+Restart the backend (`node server.js`) so it picks up the `.env` change, then click the **🖥️ Local** button in the top-right of the app. A confirmation modal explains what changes in local mode. Click **Use Local Ollama** to confirm.
+
+> **All requests now go to your local machine.** No data is sent to Google. The toggle shows **🖥️ Local** in blue when active. Switch back to **☁️ Cloud** at any time.
+
+---
+
+## Using Session History
+
+Every time you complete a session in any feature, Lumina saves it automatically to your browser's local storage. Nothing is uploaded anywhere.
+
+**To browse your history:**
+1. Click **History** in the left sidebar
+2. A panel slides in from the right showing all saved sessions, newest first
+3. Each entry shows the feature icon, session title, and how long ago it was saved
+
+**To restore a session:**
+- Click any entry — Lumina navigates to that feature and loads your previous results (roadmap, flashcards, exam report, whiteboard chat, or debate synthesis)
+
+**To delete sessions:**
+- Hover over a session and click the 🗑 icon to delete just that one
+- Click **Clear all sessions** at the bottom of the panel to wipe the full history
+
+**What triggers an auto-save:**
+
+| Feature | Saves when… |
+|---|---|
+| Learning GPS | A roadmap is generated |
+| Flash & Quiz | Flashcards are generated |
+| The Examiner | The final exam report is produced |
+| AI Whiteboard | After each AI reply (updates in place) |
+| AgentDebate | After the debate synthesis is generated |
+
+---
+
 ## Project Structure
 
 ```
@@ -176,18 +276,23 @@ lumina/
 ├── backend/
 │   ├── server.js                  # Express app — all API routes + SSE stream
 │   ├── services/
-│   │   ├── tools.js               # Gemma 4: GPS, Quiz, Examiner, Whiteboard
-│   │   ├── gemma.js               # Gemma 4 streaming debate agents + synthesis
+│   │   ├── tools.js               # Gemma 4 cloud: GPS, Quiz, Examiner, Whiteboard
+│   │   ├── gemma.js               # Gemma 4 cloud: streaming debate agents + synthesis
+│   │   ├── ollama.js              # Ollama local: mirrors all tools.js + gemma.js functions
 │   │   ├── wikipedia.js           # Wikipedia REST API — search + extract (RAG)
 │   │   └── docx.js                # Essay outline → .docx export
 │   ├── .env.example
 │   └── package.json
 ├── frontend/
 │   ├── src/
-│   │   ├── App.jsx                # Root — section routing, session state, notes
+│   │   ├── App.jsx                # Root — routing, inference toggle, history loading
+│   │   ├── db.js                  # Dexie.js schema + session CRUD helpers
 │   │   ├── i18n.js                # All UI strings (EN / ES / AR)
+│   │   ├── context/
+│   │   │   └── InferenceContext.jsx  # React context for cloud/local mode
 │   │   └── components/
 │   │       ├── Sidebar.jsx
+│   │       ├── HistoryPanel.jsx   # Slide-in session history browser
 │   │       ├── Landing.jsx        # Debate topic input + agent preview
 │   │       ├── DebateArena.jsx    # Live 3-agent debate (SSE consumer)
 │   │       ├── SynthesisScreen.jsx
@@ -201,6 +306,18 @@ lumina/
 │   └── package.json
 └── README.md
 ```
+
+---
+
+## Kaggle Submission
+
+**Subtitle:** Five Gemma 4-powered study tools in one app — roadmap, flashcards, debate arena, adaptive exam, and AI whiteboard — with cloud and fully local inference.
+
+**Project Description:**
+
+Lumina is a full-stack AI study suite built on Gemma 4 31B for the Future of Education track. Students interact with five deeply integrated tools that cover the complete learning loop: generate a personalised week-by-week learning roadmap (Learning GPS), study with AI-generated flashcards from text or handwritten notes (Flash & Quiz), debate any topic with three specialised AI agents grounded in real Wikipedia sources (AgentDebate), take an adaptive oral exam answered by voice, typing, or handwritten photo (The Examiner), and sketch on a live Excalidraw canvas while asking Gemma to analyse the drawing (AI Whiteboard).
+
+Gemma 4's multimodal capabilities are central: vision reads handwritten answers and whiteboard sketches, structured JSON output drives every quiz and exam question, and real-time streaming powers the live debate. The app supports three languages (English, Spanish, Arabic with full RTL layout) and runs with either the Google AI Studio API or a fully local Ollama instance — no data leaves the device in local mode. Session history is persisted in IndexedDB so learners can pick up any previous session exactly where they left off.
 
 ---
 

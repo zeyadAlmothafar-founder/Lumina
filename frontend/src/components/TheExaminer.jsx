@@ -599,13 +599,14 @@ function ExamScreen({ exam, onFinish, lang = 'en', onSaveNote, onSaveReport }) {
 }
 
 // ── Report Screen ─────────────────────────────────────────────────────────────
-function ReportScreen({ report, onRetry, lang = 'en', onSaveNote }) {
+function ReportScreen({ report, onRetry, lang = 'en', onSaveNote, totalQuestions }) {
   const gc = GRADE_COLOR[report?.grade] || '#F08D39';
+  const maxScore = (totalQuestions || 1) * 10;
 
   const handleSave = () => {
     if (!onSaveNote) return;
     const text = [
-      `Grade: ${report.grade} (${report.overallScore}/10)`,
+      `Grade: ${report.grade} (${report.overallScore}/${maxScore})`,
       `Summary: ${report.summary}`,
       `Strengths: ${report.strengths?.join(', ')}`,
       `Areas to improve: ${report.areasToImprove?.join(', ')}`,
@@ -620,7 +621,7 @@ function ReportScreen({ report, onRetry, lang = 'en', onSaveNote }) {
       <div className="rounded-2xl px-8 py-8 text-center"
            style={{ background: 'var(--bg-flip-back)', border: '1px solid rgba(240,141,57,0.25)' }}>
         <div className="text-6xl font-black mb-1" style={{ color: gc }}>{report?.grade}</div>
-        <div className="text-3xl font-bold mb-2" style={{ color: 'var(--t1)' }}>{report?.overallScore}/10</div>
+        <div className="text-3xl font-bold mb-2" style={{ color: 'var(--t1)' }}>{report?.overallScore}/{maxScore}</div>
         <p className="text-sm" style={{ color: 'rgba(var(--t-rgb),0.55)' }}>{report?.summary}</p>
       </div>
 
@@ -726,6 +727,7 @@ export default function TheExaminer({ lang = 'en', onSaveNote, topicContext, ini
         {phase === 'report' && (
           <ReportScreen
             report={report}
+            totalQuestions={exam?.total}
             lang={lang}
             onSaveNote={onSaveNote}
             onRetry={() => { setExam(null); setRep(null); setPhase('setup'); }}

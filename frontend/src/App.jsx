@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import Sidebar from './components/Sidebar.jsx';
 import LearningGPS from './components/LearningGPS.jsx';
 import FlashQuiz from './components/FlashQuiz.jsx';
@@ -65,6 +65,11 @@ export default function App() {
   const [topicContext, setTopicContext] = useState(null);
   // Incrementing a section's key causes its component to remount with fresh state
   const [sessionKeys, setSessionKeys]  = useState({ gps: 0, quiz: 0, debate: 0, examiner: 0, whiteboard: 0 });
+
+  // Whiteboard lazy-mount: Excalidraw needs real dimensions on first render.
+  // Only mount it after the user first opens that tab; then keep it alive.
+  const [wbMounted, setWbMounted] = useState(false);
+  useEffect(() => { if (section === 'whiteboard') setWbMounted(true); }, [section]);
 
   // ── Inference mode ─────────────────────────────────────────────────────────
   const [inferenceMode, setInferenceMode]     = useState('api'); // 'api' | 'local'
@@ -200,9 +205,12 @@ export default function App() {
           <div className="flex-1 overflow-hidden" style={{ display: section === 'examiner' ? 'block' : 'none' }}>
             <TheExaminer key={sessionKeys.examiner} lang={lang} onSaveNote={saveNote} topicContext={topicContext?.mode === 'examiner' ? topicContext : null} initialData={initialData.examiner} />
           </div>
-          <div className="flex-1 overflow-hidden" style={{ display: section === 'whiteboard' ? 'flex' : 'none' }}>
-            <AIWhiteboard key={sessionKeys.whiteboard} lang={lang} onSaveNote={saveNote} theme={theme} initialData={initialData.whiteboard} />
-          </div>
+          {/* Whiteboard lazy-mounts on first visit so Excalidraw gets real dimensions */}
+          {wbMounted && (
+            <div className="flex-1 overflow-hidden" style={{ display: section === 'whiteboard' ? 'block' : 'none', position: 'relative' }}>
+              <AIWhiteboard key={sessionKeys.whiteboard} lang={lang} onSaveNote={saveNote} theme={theme} initialData={initialData.whiteboard} />
+            </div>
+          )}
         </main>
 
         <NotesPanel
