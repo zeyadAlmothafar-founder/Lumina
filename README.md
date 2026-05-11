@@ -49,10 +49,6 @@ A full **Excalidraw** canvas with a Gemma 4 chat panel on the side. Draw diagram
 ### 🗒️ Notes Panel
 Save any output — roadmap weeks, flashcard sets, exam reports, whiteboard answers — to a persistent in-session notes panel. Download everything as a plain text file.
 
----
-
-## New in This Release
-
 ### 🖥️ Local Inference via Ollama
 Run every AI feature entirely on your own machine — no API key, no cloud, no data leaves your device.
 
