@@ -1,3 +1,4 @@
+![Project Screenshot](logo.png)
 # Lumina — AI Study Suite powered by Gemma 4
 
 > **5 AI-powered study tools in one app — learning roadmap, flashcards, Socratic debate arena, adaptive exam & AI whiteboard — running on Gemma 4 31B via cloud or fully local Ollama inference.**
