@@ -95,13 +95,18 @@ function QuizMode({ cards, onFinish, lang = 'en' }) {
   const [results, setResults] = useState([]);
 
   const card = cards[idx];
-  const isCorrect = submitted &&
-    input.toLowerCase().trim().includes(card.answer.toLowerCase().trim().split(' ')[0]);
+  // Compute correctness independently so it can be used both in handleSubmit
+  // (before `submitted` flips to true) and in the UI (after submission).
+  const checkCorrect = (answer) =>
+    answer.toLowerCase().trim().includes(card.answer.toLowerCase().trim().split(' ')[0]);
+
+  const isCorrect = submitted && checkCorrect(input);
 
   const handleSubmit = () => {
     if (!input.trim() || submitted) return;
+    const correct = checkCorrect(input);   // evaluate before state update
     setSubm(true);
-    setResults(r => [...r, { card, userAnswer: input.trim(), passed: isCorrect }]);
+    setResults(r => [...r, { card, userAnswer: input.trim(), passed: correct }]);
   };
 
   const handleNext = () => {

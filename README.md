@@ -15,8 +15,7 @@ Students don't struggle from a lack of information — they struggle from a lack
 
 ## Demo
 
-> 📹 **[Watch the demo video →](#)**
-> *(replace `#` with your YouTube / Loom link before submitting)*
+> 📹 **[Watch the demo video →](https://youtu.be/doVPkSw4Zuw)**
 
 ---
 
