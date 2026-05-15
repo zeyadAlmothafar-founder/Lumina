@@ -15,7 +15,7 @@ Students don't struggle from a lack of information — they struggle from a lack
 
 ## Demo
 
-> 📹 **[Watch the demo video →](https://youtu.be/doVPkSw4Zuw)**
+> 📹 **[Watch the demo video →](https://youtu.be/DoKOSnYhl8w)**
 
 ---
 
